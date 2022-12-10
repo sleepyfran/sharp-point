@@ -1,8 +1,5 @@
 module SharpPoint.DSL
 
-open Avalonia.Controls
-open Avalonia.FuncUI.DSL
-open Avalonia.FuncUI.Types
 open SharpPoint.Domain
 
 (* --- Slide --- *)
@@ -10,7 +7,7 @@ type SlideBuilder() =
     member inline _.Yield(()) = ()
 
     [<CustomOperation("header")>]
-    member inline _.Header((), header: string) : Slide = [ SlideContent.Header header ]
+    member inline _.Header((), header: string) : Slide = { Header = header }
 
 let slide = SlideBuilder()
 
