@@ -34,6 +34,7 @@ let private initialSlide deck =
                         TextBlock.fontSize 72
                         TextBlock.fontWeight FontWeight.Bold
                         TextBlock.text deck.Title
+                        TextBlock.textWrapping TextWrapping.Wrap
                     ]
                 ]
             ]
@@ -43,8 +44,29 @@ let private slide (index: int) slide =
     Component.create(
         $"slide-{index}",
         fun _ ->
-            TextBlock.create [
-                TextBlock.text $"Slide number {index}"
+            StackPanel.create [
+               StackPanel.children [
+                   if System.String.IsNullOrEmpty slide.Header |> not then
+                       yield TextBlock.create [
+                           TextBlock.fontSize 48
+                           TextBlock.fontWeight FontWeight.Bold
+                           TextBlock.text slide.Header
+                       ]
+                       
+                   yield!
+                        slide.Content
+                        |> List.map (fun content ->
+                            match content with
+                            | Text text ->
+                                TextBlock.create [
+                                    TextBlock.text text
+                                ] :> IView
+                            | Image url ->
+                                TextBlock.create [
+                                    TextBlock.text $"Loading {url}"
+                                ]
+                        )
+               ]
             ]
     ) :> IView
 
@@ -52,16 +74,12 @@ let root deck =
     Component(fun ctx ->
         let currentSlide = ctx.usePassedRead state.CurrentSlide
         
-        StackPanel.create [
-            StackPanel.children [
-                match currentSlide.Current with
-                | Initial -> initialSlide deck
-                | Slide idx ->
-                    deck.Slides
-                    |> List.item idx
-                    |> slide idx
-            ]
-        ]
+        match currentSlide.Current with
+        | Initial -> initialSlide deck
+        | Slide idx ->
+            deck.Slides
+            |> List.item idx
+            |> slide idx
     )
 
 (* --- Entrypoint --- *)
@@ -88,20 +106,21 @@ type MainWindow(deck: Deck) as this =
     override this.OnKeyDown event =
         let current = state.CurrentSlide.Current
             
-        match (current, event.Key) with
+        match current, event.Key with
         | Slide 0, Key.Left ->
             (* Go back to the initial slide *)
-            state.CurrentSlide.Set Initial
+            Initial
         | Initial, Key.Right when List.isEmpty deck.Slides |> not ->
             (* Go to the first slide (if any) *)
-            Slide 0 |> state.CurrentSlide.Set
+            Slide 0
         | Slide index, Key.Left when deck.Slides |> hasSlideAvailableIn (index - 1) ->
             (* Go to the previous slide (if any) *)
-            index - 1 |> Slide |> state.CurrentSlide.Set
+            index - 1 |> Slide
         | Slide index, Key.Right when deck.Slides |> hasSlideAvailableIn (index + 1) ->
             (* Go to the next slide (if any) *)
-            index + 1 |> Slide |> state.CurrentSlide.Set
-        | _ -> ()
+            index + 1 |> Slide
+        | _ -> current
+        |> state.CurrentSlide.Set
 
 type App(deck: Deck) =
     inherit Application()

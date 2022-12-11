@@ -2,12 +2,38 @@ module SharpPoint.DSL
 
 open SharpPoint.Domain
 
+(** --- Slide content --- **)
+let text txt = SlideContent.Text txt
+let image url = SlideContent.Image url
+
 (* --- Slide --- *)
+[<RequireQualifiedAccess>]
+type SlideProperty =
+    | Header of header: string
+    | Content of content: SlideContent
+
 type SlideBuilder() =
     member inline _.Yield(()) = ()
-
+    
+    member inline x.Run(props: SlideProperty list) =
+        props
+        |> List.fold
+            (fun slide prop ->
+                match prop with
+                | SlideProperty.Header header -> { slide with Header = header }
+                | SlideProperty.Content content -> { slide with Content = content :: slide.Content })
+            { Header = ""; Content = [] }
+            
     [<CustomOperation("header")>]
-    member inline _.Header((), header: string) : Slide = { Header = header }
+    member inline _.Header((), header: string) = [ SlideProperty.Header header ]
+
+    [<CustomOperation("text")>]
+    member inline _.Text(prev: SlideProperty list, text: string) =
+        (Text text |> SlideProperty.Content) :: prev
+    
+    [<CustomOperation("image")>]
+    member inline _.Image(prev: SlideProperty list, url: string) =
+        (Image url |> SlideProperty.Content) :: prev
 
 let slide = SlideBuilder()
 
@@ -15,12 +41,6 @@ let slide = SlideBuilder()
 type DeckProperty =
     | Title of string
     | Slide of Slide
-
-let firstDefined str1 str2 =
-    if System.String.IsNullOrEmpty str1 then
-        str2
-    else
-        str1
 
 (* --- Deck --- *)
 type DeckBuilder() =
@@ -30,25 +50,23 @@ type DeckBuilder() =
     member inline _.Delay(f: unit -> DeckProperty list) = f ()
     member inline _.Delay(f: unit -> DeckProperty) = [ f () ]
 
-    member inline _.Combine(newProp: DeckProperty, previousProps: DeckProperty list) = previousProps @ [ newProp ]
+    member inline _.Combine(newProp: DeckProperty, previousProps: DeckProperty list) =
+        previousProps @ [newProp]
 
-    member inline _.For(prop: DeckProperty, f: unit -> DeckProperty list) = [ prop ] @ f ()
-
-    member inline _.Run(prop) =
-        match prop with
-        | DeckProperty.Title title -> { Title = title; Slides = [] }
-        | DeckProperty.Slide slide -> { Title = ""; Slides = [ slide ] }
+    member inline x.For(prop: DeckProperty, f: unit -> DeckProperty list) =
+        x.Combine(prop, f())
 
     member inline x.Run(props: DeckProperty list) =
         props
         |> List.fold
-            (fun acc prop ->
-                let itemDeck = x.Run(prop)
-
-                { Title = firstDefined acc.Title itemDeck.Title
-                  Slides = acc.Slides @ itemDeck.Slides })
+            (fun deck prop ->
+                match prop with
+                | DeckProperty.Title title -> { deck with Title = title }
+                | DeckProperty.Slide slide -> { deck with Slides = slide :: deck.Slides })
             { Title = ""; Slides = [] }
 
+    member inline x.Run(prop: DeckProperty) = x.Run([prop])
+    
     [<CustomOperation("title")>]
     member inline _.Title((), title: string) = DeckProperty.Title title
 

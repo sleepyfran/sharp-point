@@ -4,12 +4,20 @@ open SharpPoint.DSL
 open SharpPoint.Views
 
 deck {
-    title "A test"
+    title "SharpPoint: Presentations made sharper"
 
-    slide { header "Hello world!" }
+    slide {
+        header "This is the first slide"
+        text "oh wow!"
+        image "https://funnygif.com/thatgif"
+    }
 
-    slide { header "Wow!" }
+    slide {
+        header "...Wow, this is the second"
+    }
 
-    slide { header "Much wow!" }
+    slide {
+        header "NO WAY, a third?!"
+    }
 }
 |> showPresentation
