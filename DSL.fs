@@ -2,10 +2,6 @@ module SharpPoint.DSL
 
 open SharpPoint.Domain
 
-(** --- Slide content --- **)
-let text txt = SlideContent.Text txt
-let image url = SlideContent.Image url
-
 (* --- Slide --- *)
 [<RequireQualifiedAccess>]
 type SlideProperty =
@@ -51,8 +47,8 @@ type DeckBuilder() =
     member inline _.Delay(f: unit -> DeckProperty) = [ f () ]
 
     member inline _.Combine(newProp: DeckProperty, previousProps: DeckProperty list) =
-        previousProps @ [newProp]
-
+        newProp :: previousProps
+    
     member inline x.For(prop: DeckProperty, f: unit -> DeckProperty list) =
         x.Combine(prop, f())
 
@@ -62,7 +58,7 @@ type DeckBuilder() =
             (fun deck prop ->
                 match prop with
                 | DeckProperty.Title title -> { deck with Title = title }
-                | DeckProperty.Slide slide -> { deck with Slides = slide :: deck.Slides })
+                | DeckProperty.Slide slide -> { deck with Slides = deck.Slides @ [slide] })
             { Title = ""; Slides = [] }
 
     member inline x.Run(prop: DeckProperty) = x.Run([prop])

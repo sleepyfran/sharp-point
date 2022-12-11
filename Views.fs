@@ -1,5 +1,7 @@
 module SharpPoint.Views
 
+open System.IO
+open System.Net.Http
 open Avalonia
 open Avalonia.Controls
 open Avalonia.Controls.ApplicationLifetimes
@@ -10,6 +12,7 @@ open Avalonia.FuncUI.Types
 open Avalonia.Input
 open Avalonia.Layout
 open Avalonia.Media
+open Avalonia.Media.Imaging
 open Avalonia.Themes.Fluent
 open SharpPoint.Domain
 
@@ -20,6 +23,55 @@ type private CurrentSlide =
 
 type private GlobalState = { CurrentSlide: IWritable<CurrentSlide> }
 let private state = { CurrentSlide = new State<CurrentSlide>(Initial) }
+
+(* --- Custom hooks --- *)
+type Deferred<'t> =
+        | NotStartedYet
+        | Pending
+        | Resolved of 't
+        | Failed of exn
+
+    type IComponentContext with
+
+        member this.useAsync<'signal>(init: Async<'signal>) : IWritable<Deferred<'signal>> =
+            let state = this.useState (Deferred.NotStartedYet, true)
+
+            this.useEffect (
+                handler = (fun _ ->
+                    match state.Current with
+                    | Deferred.NotStartedYet ->
+                        state.Set Deferred.Pending
+
+                        Async.StartImmediate (
+                            async {
+                                let! result = Async.Catch init
+
+                                match result with
+                                | Choice1Of2 value -> state.Set (Deferred.Resolved value)
+                                | Choice2Of2 exn -> state.Set (Deferred.Failed exn)
+                            }
+                        )
+
+                    | _ ->
+                        ()
+                ),
+                triggers = [ EffectTrigger.AfterInit ]
+            )
+
+            state
+
+(* --- Utils --- *)
+let loadImage (url: string) =
+    async {
+        use httpClient = new HttpClient()
+        let! bytes =
+            url
+            |> httpClient.GetByteArrayAsync
+            |> Async.AwaitTask
+
+        use stream = new MemoryStream(bytes)
+        return new Bitmap(stream)
+    }
 
 (* --- Views --- *)
 let private initialSlide deck =
@@ -40,6 +92,32 @@ let private initialSlide deck =
             ]
     ) :> IView
 
+let private image url =
+    Component.create (
+        $"image-{url}",
+        fun ctx ->
+            let image =
+                loadImage url
+                |> ctx.useAsync
+                
+            match image.Current with
+            | Deferred.Resolved bitmap ->
+                Image.create [
+                    Image.source bitmap
+                    Image.maxHeight 300
+                ]
+            | Deferred.Failed e ->
+                TextBlock.create [
+                    TextBlock.text $"{e.Message}"
+                    TextBlock.foreground Brushes.Red
+                ]
+            | Deferred.Pending | Deferred.NotStartedYet ->
+                ProgressBar.create [
+                    ProgressBar.isEnabled true
+                    ProgressBar.isIndeterminate true
+                ]
+    )
+
 let private slide (index: int) slide =
     Component.create(
         $"slide-{index}",
@@ -59,12 +137,12 @@ let private slide (index: int) slide =
                             match content with
                             | Text text ->
                                 TextBlock.create [
+                                    TextBlock.fontSize 24
                                     TextBlock.text text
+                                    TextBlock.textWrapping TextWrapping.Wrap
                                 ] :> IView
                             | Image url ->
-                                TextBlock.create [
-                                    TextBlock.text $"Loading {url}"
-                                ]
+                                image url
                         )
                ]
             ]
